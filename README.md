@@ -1,463 +1,328 @@
-# Todo API - Spring Boot REST API
+# Todo API – Spring Boot RESTful Service
 
-A RESTful Todo API built with Spring Boot 4.0.6, featuring JWT authentication, MySQL database, and rate limiting.
+A production-ready Todo REST API built with Spring Boot, featuring JWT authentication, refresh tokens, rate limiting, and a containerized deployment using Docker + Nginx.
+
+---
 
 ## Table of Contents
 
+- [Overview](#overview)
 - [Features](#features)
 - [Architecture](#architecture)
-- [Technology Stack](#technology-stack)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
 - [Database Schema](#database-schema)
 - [Installation](#installation)
 - [API Documentation](#api-documentation)
 - [Authentication](#authentication)
 - [API Endpoints](#api-endpoints)
-- [Project Structure](#project-structure)
+- [Rate Limiting](#rate-limiting)
+- [Security](#security)
+- [Key Components](#key-components)
+
+---
+
+## Overview
+
+This project provides a secure and scalable backend for managing todos. It includes:
+- Stateless authentication using JWT
+- Refresh token mechanism
+- Per-user todo management
+- Rate limiting at both application and reverse proxy levels
+- Dockerized infrastructure with MySQL and Nginx
+
+---
 
 ## Features
 
 - RESTful API design
-- JWT (JSON Web Token) authentication
-- User registration and login
-- CRUD operations for todos
-- Token refresh mechanism
-- Rate limiting (60 requests/minute per IP)
-- Custom exception handling
-- Spring Validation
-- OpenAPI 3.0 documentation (Swagger UI)
-- Spring Security configuration
-MySQL
+- JWT authentication (access + refresh tokens)
+- User registration & login
+- Todo CRUD operations
+- Pagination and filtering
+- Rate limiting with Bucket4j and Nginx
+- Global exception handling
+- Request validation (JSR-303)
+- OpenAPI 3 (Swagger UI)
+- Docker + Docker Compose setup
+- Reverse proxy with Nginx
 
 ## Architecture
-
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                    CLIENT (Postman/Browser)                          │
-└──────────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                  SECURITY FILTER CHAIN                               │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐    │
-│  │ RateLimitFilter  │  │ JwtAuthFilter    │  │ SecurityFilters  │    │
-│  │ (Bucket4j)       │  │ (JWT validation) │  │ (Spring Sec)     │    │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘    │
-└──────────────────────────────────────────────────────────────────────┘
-                                     │
-                     ┌───────────────┼───────────────┐
-                     ▼               ▼               ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                  CONTROLLERS (REST API)                              │
-│  ┌──────────────────┐        ┌──────────────────┐                    │
-│  │ AuthController   │        │ TodoController   │                    │
-│  │ /api/register    │        │ /api/todos       │                    │
-│  │ /api/login       │        │ /api/todos/{id}  │                    │
-│  │ /api/refresh...  │        │ /api/todos/...   │                    │
-│  └──────────────────┘        └──────────────────┘                    │
-└──────────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                  SERVICE LAYER (Business Logic)                      │
-│  ┌──────────────────┐        ┌──────────────────┐                    │
-│  │ AuthService      │        │ TodoService      │                    │
-│  │ - Authentication │        │ - CRUD Todo      │                    │
-│  │ - Token Mgmt     │        │ - Authorization  │                    │
-│  └──────────────────┘        └──────────────────┘                    │
-└──────────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                  REPOSITORY LAYER (JPA/DAO)                          │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐    │
-│  │ UserRepository   │  │ TodoRepository   │  │ RefreshTokenRepo │    │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘    │
-└──────────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                  DATABASE LAYER                                      │
-│  ┌───────────────────────────────────────────────────────────────┐   │
-│  │                             MySQL                             │   │
-│  └───────────────────────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                          CLIENT                                 │
+│                   (Browser/App/Postman)                         │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            │ HTTP/HTTPS
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  NGINX (Reverse Proxy)                          │
+│                 Port 80 (HTTP) / 443 (HTTPS)                    │
+│                Load balancing / Rate limiting                   │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            │ HTTP
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       SPRING BOOT APP                           │
+│                    (Todo API Application)                       │
+│  ┌────────────────┐  ┌───────────────┐  ┌──────────────┐        │
+│  │ AuthController │  │ TodoController│  │ Rate Limiter │        │
+│  └────────────────┘  └───────────────┘  └──────────────┘        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
+│  │   JwtService │  │TodoService   │  │AuthService   │           │
+│  └──────────────┘  └──────────────┘  └──────────────┘           │
+│  ┌──────────────┐  ┌────────────────┐                           │
+│  │JwtAuthFilter │  │GlobalExcHandler│                           │
+│  └──────────────┘  └────────────────┘                           │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            │ JDBC
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                          MySQL                                  │
+│                     (Todo Database)                             │
+│  ┌──────────┐ ┌──────────┐ ┌─────────────┐                      │
+│  │  users   │ │  todos   │ │refresh_token│                      │
+│  └──────────┘ └──────────┘ └─────────────┘                      │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Request Flow
+---
 
-```
-Client Request
-      │
-      ▼
-┌──────────────┐
-│ Rate Limit   │  ← Check IP-based quota (60 req/min)
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ JwtAuthFilter│  ← Extract & validate JWT from Authorization header
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Load User    │  ← Load User by email from JWT
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Controller   │  ← Handle request
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Service      │  ← Business logic & authorization
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Repository   │  ← Database queries
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│  Database    │  ← MySQL
-└──────────────┘
-```
+## Tech Stack
 
-## Technology Stack
+| Category        | Technology |
+|----------------|-----------|
+| Framework       | Spring Boot |
+| Language        | Java 21 |
+| Security        | Spring Security + JWT (jjwt) |
+| Database        | MySQL 8 |
+| ORM             | Spring Data JPA (Hibernate) |
+| Build Tool      | Maven |
+| API Docs        | OpenAPI 3 + Swagger UI |
+| Validation      | Jakarta Validation |
+| Rate Limiting   | Bucket4j + Nginx |
+| DevOps          | Docker, Docker Compose, Nginx |
+| Utilities       | Lombok |
 
-| Category | Technology |
-|----------|-----------|
-| **Framework** | Spring Boot 4.0.6 |
-| **Language** | Java 21 |
-| **Security** | Spring Security + JWT (jjwt) |
-| **Database** | MySQL 8.0 |
-| **ORM** | Spring Data JPA + Hibernate |
-| **Build Tool** | Maven |
-| **API Doc** | OpenAPI 3.0 + Swagger UI |
-| **Validation** | Spring Validation (JSR-303) |
-| **Rate Limiting** | Bucket4j |
-| **Code Quality** | Lombok |
+---
 
 ## Project Structure
 
 ```
-src/main/java/com/example/todoapi/
-├── TodoApiApplication.java          # Main application entry point
-│
-├── config/                          # Configuration classes
-│   ├── SecurityConfig.java          # Security configuration
-│   ├── OpenApiConfig.java           # Swagger configuration
-│   ├── RateLimiterConfig.java       # Rate limiting config
-│   └── RateLimitFilter.java         # Rate limit middleware
-│
-├── controller/                      # REST Controllers
-│   ├── AuthController.java          # Authentication endpoints
-│   └── TodoController.java          # Todo endpoints
-│
-├── service/                         # Business logic
-│   ├── AuthService.java             # Authentication service
-│   ├── TodoService.java             # Todo service
-│   └── CustomUserDetailsService.java # User details loader
-│
-├── repository/                      # JPA Repositories
-│   ├── UserRepository.java
-│   ├── TodoRepository.java
-│   └── RefreshTokenRepository.java
-│
-├── model/                           # Database entities
-│   ├── User.java
-│   ├── Todo.java
-│   └── RefreshToken.java
-│
-├── dto/                             # Data Transfer Objects
-│   ├── AuthDto.java
-│   └── TodoDto.java
-│
-├── security/                        # Security components
-│   ├── JwtService.java              # JWT operations
-│   └── JwtAuthFilter.java           # JWT filter
-│
-├── exception/                       # Custom exceptions
-│   ├── ResourceNotFoundException.java
-│   ├── UnauthorizedException.java
-│   └── DuplicateResourceException.java
-│
-└── global/                          # Cross-cutting concerns
-    └── GlobalExceptionHandler.java  # Exception handler
+src/
+├── main/
+│   ├── java/com/example/todoapi/
+│   │   ├── config/              # Configuration classes
+│   │   │   ├── RateLimiterConfig.java
+│   │   │   ├── RateLimitFilter.java
+│   │   │   └── SecurityConfig.java
+│   │   ├── controller/          # REST API controllers
+│   │   │   ├── AuthController.java
+│   │   │   └── TodoController.java
+│   │   ├── dto/                 # Data Transfer Objects
+│   │   │   ├── AuthDto.java
+│   │   │   └── TodoDto.java
+│   │   ├── exception/           # Custom exceptions
+│   │   │   ├── DuplicateResourceException.java
+│   │   │   ├── ResourceNotFoundException.java
+│   │   │   └── UnauthorizedException.java
+│   │   ├── global/              # Global configuration
+│   │   │   └── GlobalExceptionHandler.java
+│   │   ├── model/               # JPA entities
+│   │   │   ├── RefreshToken.java
+│   │   │   ├── Todo.java
+│   │   │   └── User.java
+│   │   ├── repository/          # JPA repositories
+│   │   │   ├── RefreshTokenRepository.java
+│   │   │   ├── TodoRepository.java
+│   │   │   └── UserRepository.java
+│   │   ├── security/            # Security-related components
+│   │   │   ├── JwtAuthFilter.java
+│   │   │   └── JwtService.java
+│   │   ├── service/             # Business logic services
+│   │   │   ├── AuthService.java
+│   │   │   ├── CustomUserDetailsService.java
+│   │   │   └── TodoService.java
+│   │   └── TodoApiApplication.java
+│   └── resources/
+│       ├── application.properties
+
 ```
+
+---
 
 ## Database Schema
 
 ### users
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | BIGINT | PK, AUTO_INCREMENT | Primary key |
-| name | VARCHAR(255) | NOT NULL | User's full name |
-| email | VARCHAR(255) | NOT NULL, UNIQUE | Username/Email |
-| password | VARCHAR(255) | NOT NULL | BCrypt hashed password |
-| created_at | TIMESTAMP | NOT NULL | Account creation time |
+| Column | Type | Description |
+|--------|------|-------------|
+| id | BIGINT (PK, Auto) | Primary key |
+| username | VARCHAR(50, UNIQUE) | User's username |
+| email | VARCHAR(100, UNIQUE) | User's email |
+| password | VARCHAR(255) | Encrypted password |
+| created_at | TIMESTAMP | Registration date |
 
 ### todos
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | BIGINT | PK, AUTO_INCREMENT | Primary key |
-| title | VARCHAR(255) | NOT NULL | Todo title |
-| description | TEXT | | Todo description |
-| completed | BOOLEAN | NOT NULL | Completion status |
-| user_id | BIGINT | FK → users.id | User owner |
-| created_at | TIMESTAMP | NOT NULL | creation time |
-| updated_at | TIMESTAMP | | Last update time |
+| Column | Type | Description |
+|--------|------|-------------|
+| id | BIGINT (PK, Auto) | Primary key |
+| user_id | BIGINT (FK) | Owner user |
+| title | VARCHAR(100) | Todo title |
+| description | TEXT | Todo details |
+| completed | BOOLEAN | Completion status |
+| created_at | TIMESTAMP | Creation date |
+| updated_at | TIMESTAMP | Last update |
 
 ### refresh_tokens
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | BIGINT | PK, AUTO_INCREMENT | Primary key |
-| token | VARCHAR(255) | NOT NULL, UNIQUE | UUID refresh token |
-| user_id | BIGINT | FK → users.id, UNIQUE | User owner |
-| expiry_date | TIMESTAMP | NOT NULL | Token expiry time |
+| Column | Type | Description |
+|--------|------|-------------|
+| id | BIGINT (PK, Auto) | Primary key |
+| user_id | BIGINT (FK) | Associated user |
+| token | VARCHAR(255, UNIQUE) | Refresh token value |
+| created_at | TIMESTAMP | Issue date |
+| expires_at | TIMESTAMP | Expiration timestamp |
 
-**Relationships:**
-- `users` → `todos` (One-to-Many)
-- `users` → `refresh_tokens` (One-to-One)
+---
 
 ## Installation
 
 ### Prerequisites
+- **For Docker**: Docker & Docker Compose
+- **For Local**: Java 21+, Maven 3.8+, MySQL 8
 
-- Java 21 or higher
-- MySQL 8.0 or higher
-- Maven 3.6+
+### Environment Setup
+1. Clone repository
+    ```bash
+    git clone https://github.com/t4mla0510/todo-api.git
+    cd todo-api
+    ```
+2. Copy the example config from `.env.example` to your local `.env` file and adjust it for your setup:
+    ```
+    cp .env.example .env
+    ```
 
-### Steps
+---
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd todo-api
-   ```
+### Run with Docker
 
-2. **Create MySQL Database**
-   ```sql
-   CREATE DATABASE tododb;
-   ```
+```bash
+docker compose up -d
+```
 
-3. **Configure Database Credentials**
+#### Services
 
-   Edit `src/main/resources/application.properties`:
-   ```properties
-   spring.datasource.username=your_username
-   spring.datasource.password=your_password
-   ```
+| Service         | Port | Description            |
+|-----------------|------|------------------------|
+| API (via Nginx) |  80  | Main entry point       |
+| MySQL           | 3307 | Database               |
+| App (internal)  | 8080 | Spring Boot (internal) |
 
-4. **Build the Project**
-   ```bash
-   mvn clean install
-   ```
+#### Access Services
+- API: http://localhost:80
+- Swagger UI: http://localhost:80/swagger-ui/index.html
 
-5. **Run the Application**
-   ```bash
-   mvn spring-boot:run
-   ```
+---
 
-6. **Access the Application**
-   - API: http://localhost:8080
-   - Swagger UI: http://localhost:8080/swagger-ui.html
-   - API Docs: http://localhost:8080/v3/api-docs
+### Run Locally (Without Docker)
 
-For quick development, the project uses MySQL database.
+#### Prerequisites
+- Java 21+
+- Maven 3.8+
+- MySQL 8 (running on `localhost:3306`)
+
+#### Setup MySQL Locally
+
+1. Pull and run MySQL container:
+```bash
+docker pull mysql:8
+
+docker run -d --name mysql-container -e MYSQL_ROOT_PASSWORD=123123 -e MYSQL_DATABASE=tododb -e MYSQL_USER=admin -e MYSQL_PASSWORD=123123 -p 3306:3306 mysql:8
+```
+
+2. Update `.env` file for local development:
+```env
+SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/tododb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+```
+
+### Build and Run
+
+```bash
+# Build the project
+./mvnw clean install
+
+# Run the application
+./mvnw spring-boot:run
+```
+
+### Access Services (Local)
+- API: http://localhost:8080
+- Swagger UI: http://localhost:8080/swagger-ui/index.html
+
+---
 
 ## API Documentation
 
-### Swagger UI
+- Swagger UI: `/swagger-ui/index.html`
+- OpenAPI JSON: `/v3/api-docs`
 
-Access the interactive API documentation at:
-- **URL**: http://localhost:8080/swagger-ui.html
-
-### OpenAPI JSON
-
-- **URL**: http://localhost:8080/v3/api-docs
+---
 
 ## Authentication
 
-### Token Types
+### Login Flow
+1. POST `/api/auth/login` → Returns access token + refresh tokens
+2. Access token expires in 1h
+3. Refresh token used to get new access token
 
-| Token | Purpose | Expiry | Storage |
-|-------|---------|--------|---------|
-| **Access Token** | Authenticate API requests | 24 hours | JWT (stateless) |
-| **Refresh Token** | Get new access token | 7 days | Database |
-
-### Authentication Flow
-
+### Token Usage
 ```
-┌─────────────┐                              ┌─────────────┐
-│   Register  │                              │    Login    │
-│ POST /api   │                              │ POST /api   │
-└──────┬──────┘                              └──────┬──────┘
-       │                                            │
-       │ User created                               │ Credentials valid
-       ▼                                            ▼
-  ┌──────────┐                                  ┌──────────────┐
-  │ Database │                                  │ Generate JWT │
-  └──────────┘                                  │ Generate Ref │
-                                                └──────┬───────┘
-                                                       │
-                                                       ▼
-                                                 ┌──────────────┐
-                                                 │ Return Tokens│
-                                                 │ - access_tok │
-                                                 │ - refresh_to │
-                                                 └──────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     Subsequent Requests                                 │
-│  Client sends: Authorization: Bearer <access_token>                     │
-│  Server validates JWT → Grants access                                   │
-└─────────────────────────────────────────────────────────────────────────┘
+Authorization: Bearer <access_token>
 ```
 
-### Get tokens (login)
-
-```http
-POST /api/login HTTP/1.1
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
-
-Response:
-{
-  "token": "eyJhbGciOiJIUzI1NiJ9...",
-  "refreshToken": "uuid-here"
-}
-```
-
-### Refresh token
-
-```http
-POST /api/refresh-token HTTP/1.1
-Content-Type: application/json
-
-{
-  "refreshToken": "uuid-here"
-}
-
-Response:
-{
-  "token": "eyJhbGciOiJIUzI1NiJ9...",
-  "refreshToken": "uuid-new"
-}
-```
-
-### Use access token
-
-Add the access token to the `Authorization` header:
-
-```http
-GET /api/todos HTTP/1.1
-Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
-```
+---
 
 ## API Endpoints
 
-### Authentication (Public)
+### Authentication
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `POST /api/auth/refresh-token` - Refresh access token
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/register` | Register a new user | No |
-| POST | `/api/login` | Login and get tokens | No |
-| POST | `/api/refresh-token` | Refresh access token | No |
+### Todos
+- `GET /api/todos` - List all todos
+- `GET /api/todos/{id}` - Get todo by ID
+- `POST /api/todos` - Create todo
+- `PUT /api/todos/{id}` - Update todo
+- `DELETE /api/todos/{id}` - Delete todo
 
-### Todos (Protected)
+---
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/todos` | Get paginated list | Yes |
-| GET | `/api/todos/{id}` | Get todo by ID | Yes |
-| POST | `/api/todos` | Create new todo | Yes |
-| PUT | `/api/todos/{id}` | Update todo | Yes |
-| DELETE | `/api/todos/{id}` | Delete todo | Yes |
-| PATCH | `/api/todos/{id}/complete` | Mark as complete | Yes |
+## Security
 
-### Request Examples
+- JWT-based authentication
+- Password encoding (BCrypt)
+- SQL injection protection (JPA)
+- XSS protection (Spring Security)
+- CSRF protection enabled
+- Rate limiting on all endpoints
 
-#### 1. Register User
+---
 
-```bash
-curl -X POST http://localhost:8080/api/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "John Doe",
-    "email": "john@example.com",
-    "password": "password123"
-  }'
-```
+## Key Components
 
-#### 2. Login
+| Component | Purpose |
+|-----------|---------|
+| JwtService | Token generation/validation |
+| JwtAuthFilter | Request authentication |
+| TodoService | Todo business logic |
+| AuthService | Authentication logic |
+| RateLimitFilter | Request throttling |
+| GlobalExceptionHandler | Unified error response |
 
-```bash
-curl -X POST http://localhost:8080/api/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "john@example.com",
-    "password": "password123"
-  }'
-```
-
-#### 3. Get All Todos (with pagination)
-
-```bash
-curl -X GET http://localhost:8080/api/todos?page=0&size=10 \
-  -H "Authorization: Bearer <your_access_token>"
-```
-
-#### 4. Create Todo
-
-```bash
-curl -X POST http://localhost:8080/api/todos \
-  -H "Authorization: Bearer <your_access_token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Learn Spring Boot",
-    "description": "Study Spring Boot 4.0 features"
-  }'
-```
-
-#### 5. Update Todo
-
-```bash
-curl -X PUT http://localhost:8080/api/todos/1 \
-  -H "Authorization: Bearer <your_access_token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Learn Spring Boot 4",
-    "completed": true
-  }'
-```
-
-#### 6. Delete Todo
-
-```bash
-curl -X DELETE http://localhost:8080/api/todos/1 \
-  -H "Authorization: Bearer <your_access_token>"
-```
-
-#### 7. Mark Todo as Complete
-
-```bash
-curl -X PATCH http://localhost:8080/api/todos/1/complete \
-  -H "Authorization: Bearer <your_access_token>"
-```
-
-## Security Configuration
-
-- **JWT Secret**: Configured in `application.properties`
-- **Session**: Stateless (no HTTP sessions)
-- **CSRF**: Disabled (REST API)
-- **Rate Limiting**: 60 requests/minute per IP
-- **Password Encoding**: BCrypt
+---
 
 ## Roadmap Backend Project
 Link: https://roadmap.sh/projects/todo-list-api
