@@ -2,25 +2,15 @@
 
 A production-ready Todo REST API built with Spring Boot, featuring JWT authentication, refresh tokens, rate limiting, and a containerized deployment using Docker + Nginx.
 
----
-
 ## Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
 - [Database Schema](#database-schema)
 - [Installation](#installation)
-- [API Documentation](#api-documentation)
-- [Authentication](#authentication)
 - [API Endpoints](#api-endpoints)
-- [Rate Limiting](#rate-limiting)
-- [Security](#security)
-- [Key Components](#key-components)
-
----
 
 ## Overview
 
@@ -30,8 +20,6 @@ This project provides a secure and scalable backend for managing todos. It inclu
 - Per-user todo management
 - Rate limiting at both application and reverse proxy levels
 - Dockerized infrastructure with MySQL and Nginx
-
----
 
 ## Features
 
@@ -89,8 +77,6 @@ This project provides a secure and scalable backend for managing todos. It inclu
 └─────────────────────────────────────────────────────────────────┘
 ```
 
----
-
 ## Tech Stack
 
 | Category        | Technology |
@@ -106,53 +92,6 @@ This project provides a secure and scalable backend for managing todos. It inclu
 | Rate Limiting   | Bucket4j + Nginx |
 | DevOps          | Docker, Docker Compose, Nginx |
 | Utilities       | Lombok |
-
----
-
-## Project Structure
-
-```
-src/
-├── main/
-│   ├── java/com/example/todoapi/
-│   │   ├── config/              # Configuration classes
-│   │   │   ├── RateLimiterConfig.java
-│   │   │   ├── RateLimitFilter.java
-│   │   │   └── SecurityConfig.java
-│   │   ├── controller/          # REST API controllers
-│   │   │   ├── AuthController.java
-│   │   │   └── TodoController.java
-│   │   ├── dto/                 # Data Transfer Objects
-│   │   │   ├── AuthDto.java
-│   │   │   └── TodoDto.java
-│   │   ├── exception/           # Custom exceptions
-│   │   │   ├── DuplicateResourceException.java
-│   │   │   ├── ResourceNotFoundException.java
-│   │   │   └── UnauthorizedException.java
-│   │   ├── global/              # Global configuration
-│   │   │   └── GlobalExceptionHandler.java
-│   │   ├── model/               # JPA entities
-│   │   │   ├── RefreshToken.java
-│   │   │   ├── Todo.java
-│   │   │   └── User.java
-│   │   ├── repository/          # JPA repositories
-│   │   │   ├── RefreshTokenRepository.java
-│   │   │   ├── TodoRepository.java
-│   │   │   └── UserRepository.java
-│   │   ├── security/            # Security-related components
-│   │   │   ├── JwtAuthFilter.java
-│   │   │   └── JwtService.java
-│   │   ├── service/             # Business logic services
-│   │   │   ├── AuthService.java
-│   │   │   ├── CustomUserDetailsService.java
-│   │   │   └── TodoService.java
-│   │   └── TodoApiApplication.java
-│   └── resources/
-│       ├── application.properties
-
-```
-
----
 
 ## Database Schema
 
@@ -190,7 +129,7 @@ src/
 ## Installation
 
 ### Prerequisites
-- **For Docker**: Docker & Docker Compose
+- **For Docker**: Docker
 - **For Local**: Java 21+, Maven 3.8+, MySQL 8
 
 ### Environment Setup
@@ -203,8 +142,6 @@ src/
     ```
     cp .env.example .env
     ```
-
----
 
 ### Run with Docker
 
@@ -224,14 +161,7 @@ docker compose up -d
 - API: http://localhost:80
 - Swagger UI: http://localhost:80/swagger-ui/index.html
 
----
-
 ### Run Locally (Without Docker)
-
-#### Prerequisites
-- Java 21+
-- Maven 3.8+
-- MySQL 8 (running on `localhost:3306`)
 
 #### Setup MySQL Locally
 
@@ -239,7 +169,11 @@ docker compose up -d
 ```bash
 docker pull mysql:8
 
-docker run -d --name mysql-container -e MYSQL_ROOT_PASSWORD=123123 -e MYSQL_DATABASE=tododb -e MYSQL_USER=admin -e MYSQL_PASSWORD=123123 -p 3306:3306 mysql:8
+docker run -d --name mysql-container -p 3306:3306 \
+      -e MYSQL_ROOT_PASSWORD=123123 \
+      -e MYSQL_DATABASE=tododb \
+      -e MYSQL_USER=admin \
+      -e MYSQL_PASSWORD=123123 mysql:8
 ```
 
 2. Update `.env` file for local development:
@@ -247,42 +181,15 @@ docker run -d --name mysql-container -e MYSQL_ROOT_PASSWORD=123123 -e MYSQL_DATA
 SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/tododb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
 ```
 
-### Build and Run
+#### Run the Project
 
 ```bash
-# Build the project
-./mvnw clean install
-
-# Run the application
-./mvnw spring-boot:run
+./mvnw clean compile spring-boot:run
 ```
 
-### Access Services (Local)
+#### Access Services (Local)
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger-ui/index.html
-
----
-
-## API Documentation
-
-- Swagger UI: `/swagger-ui/index.html`
-- OpenAPI JSON: `/v3/api-docs`
-
----
-
-## Authentication
-
-### Login Flow
-1. POST `/api/auth/login` → Returns access token + refresh tokens
-2. Access token expires in 1h
-3. Refresh token used to get new access token
-
-### Token Usage
-```
-Authorization: Bearer <access_token>
-```
-
----
 
 ## API Endpoints
 
@@ -297,32 +204,6 @@ Authorization: Bearer <access_token>
 - `POST /api/todos` - Create todo
 - `PUT /api/todos/{id}` - Update todo
 - `DELETE /api/todos/{id}` - Delete todo
-
----
-
-## Security
-
-- JWT-based authentication
-- Password encoding (BCrypt)
-- SQL injection protection (JPA)
-- XSS protection (Spring Security)
-- CSRF protection enabled
-- Rate limiting on all endpoints
-
----
-
-## Key Components
-
-| Component | Purpose |
-|-----------|---------|
-| JwtService | Token generation/validation |
-| JwtAuthFilter | Request authentication |
-| TodoService | Todo business logic |
-| AuthService | Authentication logic |
-| RateLimitFilter | Request throttling |
-| GlobalExceptionHandler | Unified error response |
-
----
 
 ## Roadmap Backend Project
 Link: https://roadmap.sh/projects/todo-list-api
